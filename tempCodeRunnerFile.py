@@ -9,8 +9,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (confusion_matrix, classification_report,
                              accuracy_score, roc_auc_score)
 from sklearn.utils import class_weight
-import matplotlib.pyplot as plt
-import seaborn as sns
 import joblib
 
 # Set random seeds for reproducibility
@@ -51,11 +49,11 @@ class HeartDiseaseModel(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.3),
             
-            nn.Linear(32, 1)
+            nn.Linear(32, 1)  # No sigmoid here
         )
     
     def forward(self, x):
-        return torch.sigmoid(self.model(x))
+        return self.model(x)
 
 # Training with Cross-Validation
 def train_and_evaluate(X, y, n_splits=5):
@@ -91,7 +89,11 @@ def train_and_evaluate(X, y, n_splits=5):
         
         # Initialize model, loss, optimizer
         model = HeartDiseaseModel(X_train.shape[1]).to(device)
-        criterion = nn.BCELoss(weight=class_weights)
+        
+        # Use BCEWithLogitsLoss and pos_weight for class balancing
+        pos_weight = class_weights[1] / class_weights[0]  # Weight for class 1
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        
         optimizer = optim.Adam(model.parameters(), lr=0.001)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
         
@@ -119,7 +121,7 @@ def train_and_evaluate(X, y, n_splits=5):
             model.eval()
             val_loss = 0
             all_preds = []
-            all_targets = []
+            all_probs = []
             with torch.no_grad():
                 for inputs, targets in val_loader:
                     inputs, targets = inputs.to(device), targets.to(device)
@@ -127,9 +129,10 @@ def train_and_evaluate(X, y, n_splits=5):
                     loss = criterion(outputs, targets)
                     val_loss += loss.item()
                     
-                    preds = (outputs > 0.5).float().cpu().numpy()
+                    probs = torch.sigmoid(outputs).cpu().numpy()
+                    preds = (probs > 0.5).astype(int)
                     all_preds.extend(preds)
-                    all_targets.extend(targets.cpu().numpy())
+                    all_probs.extend(probs)
             
             # Early stopping check
             avg_val_loss = val_loss / len(val_loader)
@@ -154,7 +157,7 @@ def train_and_evaluate(X, y, n_splits=5):
             for inputs, _ in val_loader:
                 inputs = inputs.to(device)
                 outputs = model(inputs)
-                probs = outputs.cpu().numpy()
+                probs = torch.sigmoid(outputs).cpu().numpy()
                 preds = (probs > 0.5).astype(int)
                 all_preds.extend(preds)
                 all_probs.extend(probs)
