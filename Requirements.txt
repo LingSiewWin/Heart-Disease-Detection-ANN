@@ -1,1 +1,6 @@
-pandas numpy matplotlib keras scikit-learn
+pandas
+numpy
+matplotlib
+keras
+tensorflow
+scikit-learn
